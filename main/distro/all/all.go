@@ -62,5 +62,5 @@ import (
 	_ "v2ray.com/core/main/confloader/external"
 
 	// Load plugins
-	_ "github.com/ColetteContreras/v2ray-ssrpanel-plugin"
+	_ "github.com/Iant20/v2ray-ssrpanel-plugin"
 )
