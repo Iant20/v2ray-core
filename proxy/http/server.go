@@ -1,3 +1,5 @@
+// +build !confonly
+
 package http
 
 import (
@@ -15,6 +17,7 @@ import (
 	"v2ray.com/core/common/errors"
 	"v2ray.com/core/common/log"
 	"v2ray.com/core/common/net"
+	"v2ray.com/core/common/protocol"
 	http_proto "v2ray.com/core/common/protocol/http"
 	"v2ray.com/core/common/session"
 	"v2ray.com/core/common/signal"
@@ -22,7 +25,6 @@ import (
 	"v2ray.com/core/features/policy"
 	"v2ray.com/core/features/routing"
 	"v2ray.com/core/transport/internet"
-	"v2ray.com/core/transport/pipe"
 )
 
 // Server is an HTTP proxy server.
@@ -51,6 +53,7 @@ func (s *Server) policy() policy.Session {
 	return p
 }
 
+// Network implements proxy.Inbound.
 func (*Server) Network() []net.Network {
 	return []net.Network{net.Network_TCP}
 }
@@ -82,6 +85,12 @@ type readerOnly struct {
 }
 
 func (s *Server) Process(ctx context.Context, network net.Network, conn internet.Connection, dispatcher routing.Dispatcher) error {
+	if inbound := session.InboundFromContext(ctx); inbound != nil {
+		inbound.User = &protocol.MemoryUser{
+			Level: s.config.UserLevel,
+		}
+	}
+
 	reader := bufio.NewReaderSize(readerOnly{conn}, buf.Size)
 
 Start:
@@ -191,8 +200,8 @@ func (s *Server) handleConnect(ctx context.Context, request *http.Request, reade
 
 	var closeWriter = task.OnSuccess(requestDone, task.Close(link.Writer))
 	if err := task.Run(ctx, closeWriter, responseDone); err != nil {
-		pipe.CloseError(link.Reader)
-		pipe.CloseError(link.Writer)
+		common.Interrupt(link.Reader)
+		common.Interrupt(link.Writer)
 		return newError("connection ends").Base(err)
 	}
 
@@ -287,8 +296,8 @@ func (s *Server) handlePlainHTTP(ctx context.Context, request *http.Request, wri
 	}
 
 	if err := task.Run(ctx, requestDone, responseDone); err != nil {
-		pipe.CloseError(link.Reader)
-		pipe.CloseError(link.Writer)
+		common.Interrupt(link.Reader)
+		common.Interrupt(link.Writer)
 		return newError("connection ends").Base(err)
 	}
 
